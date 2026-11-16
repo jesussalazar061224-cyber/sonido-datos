@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datos por Sonido · Transmisor y Receptor MFSK</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#171e2e; --panel2:#1e2739; --line:#2a3550;
+    --txt:#e6ebf5; --muted:#8d99b3; --acc:#4fd1c5; --acc2:#f6ad55;
+    --ok:#68d391; --bad:#fc8181; --start:#b794f4; --end:#f687b3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);line-height:1.5}
+  header{padding:20px 16px 8px;max-width:900px;margin:auto}
+  h1{margin:0;font-size:1.45rem;letter-spacing:.2px}
+  header p{margin:4px 0 0;color:var(--muted);font-size:.95rem}
+  nav{display:flex;gap:6px;max-width:900px;margin:12px auto 0;padding:0 16px;flex-wrap:wrap}
+  nav button{background:var(--panel);color:var(--muted);border:1px solid var(--line);border-bottom:none;border-radius:10px 10px 0 0;padding:10px 16px;font-size:1rem;cursor:pointer}
+  nav button.on{background:var(--panel2);color:var(--txt);font-weight:600}
+  main{max-width:900px;margin:0 auto;padding:0 16px 40px}
+  section{display:none;background:var(--panel2);border:1px solid var(--line);border-radius:0 12px 12px 12px;padding:18px}
+  section.on{display:block}
+  label{display:block;font-size:.85rem;color:var(--muted);margin:10px 0 4px}
+  textarea,select,input[type=text]{width:100%;background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:1rem;font-family:inherit}
+  textarea{min-height:90px;resize:vertical}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+  .btn{background:var(--acc);color:#06201d;border:none;border-radius:8px;padding:11px 18px;font-size:1rem;font-weight:600;cursor:pointer}
+  .btn.sec{background:transparent;color:var(--txt);border:1px solid var(--line)}
+  .btn.stop{background:var(--bad);color:#2a0b0b}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .info{color:var(--muted);font-size:.88rem}
+  canvas{width:100%;display:block;background:var(--bg);border:1px solid var(--line);border-radius:8px;margin-top:12px}
+  .status{margin-top:12px;padding:10px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--line);font-size:.92rem}
+  .live{font-family:ui-monospace,Consolas,monospace;font-size:1.15rem;min-height:1.6em;word-break:break-all}
+  .msgs{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+  .msg{background:var(--bg);border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:8px;padding:10px 12px}
+  .msg.bad{border-left-color:var(--bad)}
+  .msg .meta{font-size:.78rem;color:var(--muted)}
+  .msg .t{font-size:1.1rem;word-break:break-word;white-space:pre-wrap}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-top:6px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .warn{background:#3a2a12;border:1px solid #6b4a1a;color:#fbd38d;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:.9rem;display:none}
+  table{border-collapse:collapse;width:100%;font-size:.85rem;margin:8px 0}
+  th,td{border:1px solid var(--line);padding:5px 7px;text-align:center}
+  th{background:var(--panel)}
+  h2{font-size:1.15rem;margin:18px 0 6px}
+  h2:first-child{margin-top:0}
+  code{background:var(--bg);padding:1px 5px;border-radius:4px;font-size:.9em}
+  input[type=range]{width:200px;vertical-align:middle}
+</style>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1420">
+<link rel="icon" href="icono-192.png">
+<link rel="apple-touch-icon" href="icono-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+</head>
+<body>
+<header>
+  <h1>📡 Datos por Sonido</h1>
+  <p>Escribe un mensaje, conviértelo en tonos (modulación MFSK) y decodifícalo con el micrófono de otro dispositivo.</p>
+</header>
+<nav>
+  <button data-tab="tx" class="on">🔊 Transmitir</button>
+  <button data-tab="rx">🎤 Recibir</button>
+  <button data-tab="how">📘 Cómo funciona</button>
+</nav>
+<main>
+  <!-- ================= TRANSMISOR ================= -->
+  <section id="tx" class="on">
+    <label for="txText">Mensaje (máx. 200 bytes, acepta acentos y emojis)</label>
+    <textarea id="txText">Hola mundo desde el proyecto de telecomunicaciones</textarea>
+    <div class="info" id="txInfo"></div>
+    <label for="txSpeed">Velocidad (símbolo = duración de cada tono)</label>
+    <select id="txSpeed">
+      <option value="0.2">Robusta · 200 ms por tono (≈20 bit/s) — para distancia o ruido</option>
+      <option value="0.12" selected>Normal · 120 ms por tono (≈33 bit/s)</option>
+      <option value="0.08">Rápida · 80 ms por tono (≈50 bit/s) — dispositivos cerca</option>
+    </select>
+    <label for="txVol">Volumen</label>
+    <input type="range" id="txVol" min="0.1" max="1" step="0.05" value="0.8">
+    <div class="row">
+      <button class="btn" id="btnPlay">▶ Enviar como sonido</button>
+      <button class="btn sec" id="btnWav">⬇ Descargar WAV</button>
+    </div>
+    <canvas id="txCanvas" height="90"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--start)"></i>Inicio</span>
+      <span><i style="background:var(--acc)"></i>Datos banco A</span>
+      <span><i style="background:var(--acc2)"></i>Datos banco B</span>
+      <span><i style="background:var(--end)"></i>Fin</span>
+    </div>
+    <div class="warn" id="txWarn"></div>
+  </section>
+
+  <!-- ================= RECEPTOR ================= -->
+  <section id="rx">
+    <div class="row" style="margin-top:0">
+      <button class="btn" id="btnListen">🎤 Empezar a escuchar</button>
+      <label class="btn sec" style="margin:0;color:var(--txt);font-size:1rem">📂 Decodificar archivo de audio
+        <input type="file" id="fileIn" accept="audio/*" style="display:none">
+      </label>
+    </div>
+    <label for="sens">Sensibilidad (umbral de tonalidad): <b id="sensVal">0.20</b> — bájala si no detecta, súbela si capta ruido</label>
+    <input type="range" id="sens" min="0.05" max="0.6" step="0.01" value="0.2">
+    <canvas id="rxCanvas" height="150"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--start)"></i>Inicio</span>
+      <span><i style="background:var(--acc)"></i>Banco A (0-F)</span>
+      <span><i style="background:var(--acc2)"></i>Banco B (0-F)</span>
+      <span><i style="background:var(--end)"></i>Fin</span>
+      <span>Barra blanca = tono detectado</span>
+    </div>
+    <div class="status" id="rxStatus">Pulsa “Empezar a escuchar” y reproduce el sonido desde el otro dispositivo.</div>
+    <label>Recibiendo…</label>
+    <div class="status live" id="rxLive"></div>
+    <div class="warn" id="rxWarn"></div>
+    <label>Mensajes recibidos</label>
+    <div class="msgs" id="rxMsgs"><div class="info">Aún no hay mensajes.</div></div>
+  </section>
+
+  <!-- ================= EXPLICACIÓN ================= -->
+  <section id="how">
+    <h2>1. Idea general</h2>
+    <p>Es un sistema de comunicación digital donde el <b>canal es el aire</b>: el altavoz es el transmisor y el micrófono el receptor. Se usa <b>MFSK</b> (<i>Multiple Frequency-Shift Keying</i>): cada símbolo se representa con un tono de frecuencia distinta.</p>
+    <h2>2. Codificación (fuente → bits → símbolos)</h2>
+    <ol>
+      <li>El texto se convierte a bytes con <b>UTF-8</b> (así funcionan la ñ, acentos y emojis).</li>
+      <li>Se arma una <b>trama</b>: <code>[LONGITUD][DATOS…][CRC-8]</code>.</li>
+      <li>Cada byte se divide en 2 <b>nibbles</b> (4 bits → valor 0–15). Cada nibble = 1 tono ⇒ 4 bits por símbolo.</li>
+      <li>Los nibbles alternan entre el <b>banco A</b> y el <b>banco B</b> de frecuencias. Así dos símbolos seguidos nunca tienen el mismo tono y el receptor puede separarlos sin necesitar un reloj sincronizado (por ejemplo, la letra “3” = 0x33 serían dos tonos iguales seguidos).</li>
+      <li>La transmisión empieza con un tono de <b>INICIO</b> (más largo, sirve de preámbulo) y termina con un tono de <b>FIN</b>.</li>
+    </ol>
+    <h2>3. Plan de frecuencias</h2>
+    <div id="freqTable"></div>
+    <p class="info">Separación de 75 Hz, rango 1200–3675 Hz: es la zona donde altavoces y micrófonos de celulares responden mejor.</p>
+    <h2>4. Demodulación (receptor)</h2>
+    <ol>
+      <li>Se capturan muestras del micrófono (sin cancelación de eco ni supresión de ruido).</li>
+      <li>Se toman ventanas de ~43 ms (con ventana de Hann y 50 % de traslape).</li>
+      <li>En cada ventana se aplica el <b>algoritmo de Goertzel</b> a las 34 frecuencias (es como una DFT pero solo en las frecuencias que interesan, muy eficiente).</li>
+      <li>Si la frecuencia más fuerte supera el umbral de tonalidad (energía en ese tono / energía total) se toma como símbolo detectado.</li>
+      <li>Un filtro de “longitud de corrida” exige que el tono aparezca en ≥2 ventanas seguidas para descartar ruido.</li>
+      <li>Al llegar el tono FIN se reconstruyen los bytes y se verifica el <b>CRC-8</b> (polinomio 0x07): ✓ si llegó íntegro, ✗ si hubo errores.</li>
+    </ol>
+    <h2>5. Tasa de datos</h2>
+    <p>Tasa de bits = bits por símbolo / duración del símbolo. Con 120 ms: 4 / 0.12 ≈ <b>33 bit/s</b>. Es un compromiso clásico: más rápido ⇒ más errores por eco y ruido.</p>
+    <h2>6. Cómo probarlo</h2>
+    <ul>
+      <li>Abre esta página en <b>dos dispositivos</b>: uno en “Transmitir” y otro en “Recibir”.</li>
+      <li>El micrófono necesita que la página se abra en <b>Chrome/Edge/Firefox</b> como archivo local o desde una dirección <b>https</b> (por ejemplo, subiéndola gratis a GitHub Pages o Netlify Drop).</li>
+      <li>Alternativa sin micrófono en vivo: graba el sonido con la grabadora del celular y usa “Decodificar archivo de audio”, o descarga el WAV y súbelo.</li>
+      <li>Empieza con el volumen alto, a 30–50 cm de distancia, en modo “Normal”.</li>
+    </ul>
+    <h2>7. Ideas para ampliar el proyecto</h2>
+    <ul>
+      <li>Medir la <b>tasa de error (BER)</b> vs. distancia y velocidad y graficarla.</li>
+      <li>Agregar <b>corrección de errores</b> (Hamming(7,4) o Reed-Solomon).</li>
+      <li>Usar frecuencias <b>ultrasónicas</b> (17–20 kHz) para que sea casi inaudible.</li>
+      <li>Implementar el receptor en Arduino/ESP32 con un micrófono MAX9814.</li>
+    </ul>
+  </section>
+</main>
+
+<script>
+// CORE-START  (lógica de módem: sin DOM, se puede probar aparte)
+const Core = (() => {
+  const BASE = 1200, STEP = 75, N_TONES = 34;
+  const START = 32, END = 33;
+  const FREQS = Array.from({length: N_TONES}, (_, k) => BASE + k * STEP);
+  const MAX_BYTES = 200;
+
+  function crc8(bytes) {
+    let c = 0;
+    for (const b of bytes) {
+      c ^= b;
+      for (let i = 0; i < 8; i++) c = (c & 0x80) ? ((c << 1) ^ 0x07) & 0xff : (c << 1) & 0xff;
+    }
+    return c;
+  }
+
+  // Texto -> lista de símbolos (índices de tono)
+  function encode(text) {
+    const data = new TextEncoder().encode(text);
+    if (data.length > MAX_BYTES) throw new Error(`El mensaje ocupa ${data.length} bytes (máx. ${MAX_BYTES}).`);
+    const frame = [data.length, ...data, crc8(data)];
+    const syms = [START];
+    let i = 0;
+    for (const b of frame) {
+      for (const nib of [b >> 4, b & 15]) { syms.push(nib + (i % 2 ? 16 : 0)); i++; }
+    }
+    syms.push(END);
+    return syms;
+  }
+
+  // Símbolos -> muestras de audio
+  function synth(syms, sr, symDur, amp = 0.8) {
+    const lead = 0.15, tail = 0.25, ramp = 0.006;
+    const durs = syms.map((s, i) => (i === 0 ? symDur * 2.5 : symDur));
+    const total = Math.ceil((lead + durs.reduce((a, b) => a + b, 0) + tail) * sr);
+    const out = new Float32Array(total);
+    let pos = Math.round(lead * sr), phase = 0;
+    const rN = Math.round(ramp * sr);
+    syms.forEach((s, i) => {
+      const n = Math.round(durs[i] * sr), w = 2 * Math.PI * FREQS[s] / sr;
+      for (let j = 0; j < n; j++) {
+        // fase continua entre símbolos (menos "clics"); rampa solo al inicio y fin de la transmisión
+        let env = 1;
+        if (i === 0 && j < rN) env = 0.5 - 0.5 * Math.cos(Math.PI * j / rN);
+        if (i === syms.length - 1 && j > n - rN) env = 0.5 - 0.5 * Math.cos(Math.PI * (n - j) / rN);
+        out[pos + j] = amp * env * Math.sin(phase);
+        phase += w;
+      }
+      phase %= 2 * Math.PI;
+      pos += n;
+    });
+    return out;
+  }
+
+  function wav(samples, sr) {
+    const buf = new ArrayBuffer(44 + samples.length * 2), v = new DataView(buf);
+    const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    str(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true); str(8, 'WAVE');
+    str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, 'data'); v.setUint32(40, samples.length * 2, true);
+    samples.forEach((s, i) => v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, s)) * 32767, true));
+    return buf;
+  }
+
+  class Decoder {
+    constructor(sr, cb = {}) {
+      this.sr = sr; this.cb = cb;
+      this.N = 2 ** Math.round(Math.log2(sr * 0.043));
+      this.hop = this.N / 2;
+      this.win = Float32Array.from({length: this.N}, (_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (this.N - 1)));
+      this.coef = FREQS.map(f => 2 * Math.cos(2 * Math.PI * f / sr));
+      this.buf = new Float32Array(0);
+      this.threshold = 0.2; this.minRun = 2;
+      this.cur = -1; this.cnt = 0; this.last = -1; this.silent = 0;
+      this.state = 'idle'; this.nibs = []; this.errs = 0; this.sinceSym = 0;
+    }
+    push(samples) {
+      const nb = new Float32Array(this.buf.length + samples.length);
+      nb.set(this.buf); nb.set(samples, this.buf.length);
+      let off = 0;
+      while (nb.length - off >= this.N) { this.frame(nb.subarray(off, off + this.N)); off += this.hop; }
+      this.buf = nb.slice(off);
+    }
+    frame(x) {
+      const N = this.N, w = this.win;
+      const xw = new Float32Array(N);
+      let E = 0;
+      for (let i = 0; i < N; i++) { xw[i] = x[i] * w[i]; E += xw[i] * xw[i]; }
+      const P = new Float32Array(N_TONES);
+      for (let k = 0; k < N_TONES; k++) {
+        const c = this.coef[k]; let s1 = 0, s2 = 0;
+        for (let i = 0; i < N; i++) { const s0 = xw[i] + c * s1 - s2; s2 = s1; s1 = s0; }
+        P[k] = s1 * s1 + s2 * s2 - c * s1 * s2;
+      }
+      let best = 0; for (let k = 1; k < N_TONES; k++) if (P[k] > P[best]) best = k;
+      const sorted = Array.from(P).sort((a, b) => a - b), med = sorted[N_TONES >> 1] + 1e-12;
+      const tonal = E > 1e-9 ? P[best] / (E * N / 3) : 0;   // ~1 para tono puro
+      const label = (tonal > this.threshold && P[best] / med > 8 && E / N > 1e-8) ? best : -1;
+      this.cb.onFrame && this.cb.onFrame(P, label, tonal);
+      this.runLength(label);
+    }
+    runLength(label) {
+      if (label === this.cur) this.cnt++; else { this.cur = label; this.cnt = 1; }
+      if (label === -1) { if (++this.silent > 12) this.last = -1; } else this.silent = 0;
+      if (this.cnt === this.minRun && label !== -1 && label !== this.last) { this.last = label; this.symbol(label); }
+      if (this.state === 'rx' && ++this.sinceSym > Math.round(2.0 * this.sr / this.hop)) this.finish(true);
+    }
+    symbol(s) {
+      this.sinceSym = 0;
+      if (s === START) {
+        if (this.state === 'rx' && this.nibs.length) this.finish(true);
+        this.state = 'rx'; this.nibs = []; this.errs = 0;
+        this.cb.onStatus && this.cb.onStatus('Tono de INICIO detectado, recibiendo…');
+        this.cb.onPartial && this.cb.onPartial('');
+        return;
+      }
+      if (this.state !== 'rx') return;
+      if (s === END) { this.finish(false); return; }
+      const bank = s >= 16 ? 1 : 0;
+      if (bank !== this.nibs.length % 2) {
+        // se perdió un símbolo: rellenamos uno para no desfasar todo el resto
+        this.errs++; this.nibs.push(0);
+      }
+      this.nibs.push(s % 16);
+      this.cb.onPartial && this.cb.onPartial(this.partialText());
+    }
+    bytes() {
+      const out = [];
+      for (let i = 0; i + 1 < this.nibs.length; i += 2) out.push((this.nibs[i] << 4) | this.nibs[i + 1]);
+      return out;
+    }
+    partialText() {
+      const b = this.bytes().slice(1);
+      return new TextDecoder('utf-8', {fatal: false}).decode(new Uint8Array(b)).replace(/\uFFFD$/, '');
+    }
+    finish(timeout) {
+      const b = this.bytes();
+      const len = b[0] ?? 0, data = b.slice(1, 1 + len), crc = b[1 + len];
+      const ok = !timeout && b.length === len + 2 && crc8(data) === crc && this.errs === 0;
+      const text = new TextDecoder('utf-8', {fatal: false}).decode(new Uint8Array(data));
+      this.state = 'idle'; this.nibs = [];
+      this.cb.onMessage && this.cb.onMessage({text, ok, timeout, errs: this.errs, bytes: data.length, expected: len});
+      this.cb.onStatus && this.cb.onStatus(timeout ? 'Transmisión interrumpida (no llegó el tono de FIN).' : 'Mensaje completo. Esperando el siguiente…');
+    }
+  }
+  return {FREQS, START, END, N_TONES, encode, synth, wav, crc8, Decoder};
+})();
+// CORE-END
+
+// ======================== INTERFAZ ========================
+const $ = id => document.getElementById(id);
+const colorOf = k => k === Core.START ? '#b794f4' : k === Core.END ? '#f687b3' : k < 16 ? '#4fd1c5' : '#f6ad55';
+const HEX = '0123456789ABCDEF';
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === b.dataset.tab));
+  if (b.dataset.tab === 'tx') drawTx(-1);
+});
+
+// ---- tabla de frecuencias ----
+(() => {
+  let h = '<table><tr><th>Nibble</th>' + [...HEX].map(c => `<th>${c}</th>`).join('') + '</tr>';
+  h += '<tr><th>Banco A (Hz)</th>' + Core.FREQS.slice(0, 16).map(f => `<td>${f}</td>`).join('') + '</tr>';
+  h += '<tr><th>Banco B (Hz)</th>' + Core.FREQS.slice(16, 32).map(f => `<td>${f}</td>`).join('') + '</tr></table>';
+  h += `<p>INICIO = <b>${Core.FREQS[Core.START]} Hz</b> · FIN = <b>${Core.FREQS[Core.END]} Hz</b></p>`;
+  $('freqTable').innerHTML = h;
+})();
+
+// ---- Transmisor ----
+let actx = null;
+const ctx = () => (actx ||= new (window.AudioContext || window.webkitAudioContext)());
+let txSyms = [];
+
+function fitCanvas(c) {
+  const r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  if (r.width && c.width !== Math.round(r.width * d)) { c.width = Math.round(r.width * d); c.height = Math.round(c.getAttribute('height') * d); }
+  return d;
+}
+
+function updateTx() {
+  try {
+    txSyms = Core.encode($('txText').value);
+    const sd = +$('txSpeed').value;
+    const dur = (txSyms.length - 1) * sd + sd * 2.5 + 0.4;
+    const nB = new TextEncoder().encode($('txText').value).length;
+    $('txInfo').textContent = `${nB} bytes → trama de ${nB + 2} bytes → ${txSyms.length} tonos · duración ≈ ${dur.toFixed(1)} s`;
+    $('btnPlay').disabled = $('btnWav').disabled = false;
+  } catch (e) { $('txInfo').textContent = e.message; txSyms = []; $('btnPlay').disabled = $('btnWav').disabled = true; }
+  drawTx(-1);
+}
+
+function drawTx(active) {
+  const c = $('txCanvas'), d = fitCanvas(c), g = c.getContext('2d');
+  g.clearRect(0, 0, c.width, c.height);
+  if (!txSyms.length) return;
+  const n = txSyms.length, bw = c.width / n, H = c.height;
+  txSyms.forEach((s, i) => {
+    const h = (0.25 + 0.7 * s / (Core.N_TONES - 1)) * H;
+    g.globalAlpha = active < 0 ? 0.85 : i === active ? 1 : i < active ? 0.35 : 0.6;
+    g.fillStyle = colorOf(s);
+    g.fillRect(i * bw + 0.5, H - h, Math.max(1, bw - 1), h);
+    if (i === active) { g.globalAlpha = 1; g.fillStyle = '#fff'; g.fillRect(i * bw, 0, Math.max(2, bw), 3 * d); }
+  });
+  g.globalAlpha = 1;
+}
+
+$('txText').oninput = updateTx; $('txSpeed').onchange = updateTx;
+window.addEventListener('resize', () => drawTx(-1));
+
+let playing = null;
+$('btnPlay').onclick = async () => {
+  const a = ctx();
+  try { await a.resume(); } catch (e) {}
+  if (playing) { try { playing.stop(); } catch (e) {} playing = null; return; }
+  const sd = +$('txSpeed').value, samples = Core.synth(txSyms, a.sampleRate, sd, +$('txVol').value);
+  const buf = a.createBuffer(1, samples.length, a.sampleRate);
+  buf.copyToChannel(samples, 0);
+  const src = a.createBufferSource(); src.buffer = buf; src.connect(a.destination);
+  const t0 = a.currentTime + 0.05; src.start(t0); playing = src;
+  $('btnPlay').textContent = '■ Detener'; $('btnPlay').classList.add('stop');
+  const starts = []; let t = 0.15; txSyms.forEach((s, i) => { starts.push(t); t += i === 0 ? sd * 2.5 : sd; });
+  const tick = () => {
+    if (playing !== src) return;
+    const el = a.currentTime - t0; let idx = -1;
+    for (let i = 0; i < starts.length; i++) if (el >= starts[i]) idx = i;
+    if (el > t) idx = -1;
+    drawTx(idx); requestAnimationFrame(tick);
+  };
+  tick();
+  src.onended = () => { if (playing === src) playing = null; $('btnPlay').textContent = '▶ Enviar como sonido'; $('btnPlay').classList.remove('stop'); drawTx(-1); };
+};
+
+$('btnWav').onclick = () => {
+  const sr = 44100, data = Core.wav(Core.synth(txSyms, sr, +$('txSpeed').value, +$('txVol').value), sr);
+  try {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], {type: 'audio/wav'}));
+    a.download = 'mensaje_mfsk.wav'; document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) {
+    $('txWarn').style.display = 'block';
+    $('txWarn').textContent = 'Este visor no permite descargas. Abre la página como archivo en tu navegador para descargar el WAV.';
+  }
+};
+updateTx();
+
+// ---- Receptor ----
+let lastP = new Float32Array(Core.N_TONES), lastLabel = -1, lastTonal = 0, rxStream = null, rxNode = null, rxDec = null;
+const peaks = new Float32Array(Core.N_TONES);
+
+function makeDecoder(sr) {
+  const d = new Core.Decoder(sr, {
+    onFrame: (P, label, tonal) => { lastP = P; lastLabel = label; lastTonal = tonal; },
+    onStatus: s => $('rxStatus').textContent = s,
+    onPartial: t => $('rxLive').textContent = t || '…',
+    onMessage: addMessage,
+  });
+  d.threshold = +$('sens').value;
+  return d;
+}
+
+function addMessage(m) {
+  const box = $('rxMsgs');
+  if (box.querySelector('.info')) box.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'msg' + (m.ok ? '' : ' bad');
+  const why = m.ok ? '✓ CRC correcto' : m.timeout ? '✗ incompleto (sin tono FIN)' : `✗ con errores (${m.errs} símbolos perdidos, ${m.bytes}/${m.expected} bytes)`;
+  div.innerHTML = `<div class="meta">${new Date().toLocaleTimeString()} · ${why}</div><div class="t"></div>`;
+  div.querySelector('.t').textContent = m.text || '(vacío)';
+  box.prepend(div);
+  $('rxLive').textContent = '';
+}
+
+function drawRx() {
+  const c = $('rxCanvas'), d = fitCanvas(c), g = c.getContext('2d'), H = c.height, W = c.width;
+  g.clearRect(0, 0, W, H);
+  const bw = W / Core.N_TONES;
+  let mx = 1e-9; for (const p of lastP) mx = Math.max(mx, p);
+  for (let k = 0; k < Core.N_TONES; k++) {
+    const db = 10 * Math.log10(lastP[k] / mx + 1e-9);   // relativo, 0 a -60 dB
+    const v = Math.max(0, 1 + db / 60) * Math.min(1, lastTonal * 3 + 0.25);
+    peaks[k] = Math.max(v, peaks[k] * 0.93);
+    g.fillStyle = k === lastLabel ? '#ffffff' : colorOf(k);
+    g.globalAlpha = k === lastLabel ? 1 : 0.75;
+    g.fillRect(k * bw + 1, H - 16 * d - v * (H - 22 * d), bw - 2, v * (H - 22 * d));
+    g.globalAlpha = 0.5; g.fillRect(k * bw + 1, H - 16 * d - peaks[k] * (H - 22 * d), bw - 2, 2 * d);
+  }
+  g.globalAlpha = 1; g.fillStyle = '#8d99b3'; g.font = `${10 * d}px system-ui`;
+  g.fillText(Core.FREQS[0] + ' Hz', 2 * d, H - 3 * d);
+  const lbl = Core.FREQS[Core.N_TONES - 1] + ' Hz'; g.fillText(lbl, W - g.measureText(lbl).width - 2 * d, H - 3 * d);
+  const thr = `tonalidad ${lastTonal.toFixed(2)}`; g.fillText(thr, W / 2 - g.measureText(thr).width / 2, H - 3 * d);
+  if (rxStream) requestAnimationFrame(drawRx);
+}
+
+$('sens').oninput = () => { $('sensVal').textContent = (+$('sens').value).toFixed(2); if (rxDec) rxDec.threshold = +$('sens').value; };
+
+function rxWarn(msg) { $('rxWarn').style.display = msg ? 'block' : 'none'; $('rxWarn').innerHTML = msg || ''; }
+
+async function startListen() {
+  rxWarn('');
+  if (!navigator.mediaDevices?.getUserMedia) {
+    rxWarn('Este navegador o visor no da acceso al micrófono. Abre el archivo .html directamente en Chrome/Edge/Firefox, o súbelo a un sitio https (GitHub Pages, Netlify Drop). También puedes usar “Decodificar archivo de audio”.');
+    return;
+  }
+  try {
+    rxStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: false}});
+  } catch (e) {
+    rxStream = null;
+    rxWarn(`No se pudo abrir el micrófono (<code>${e.name}</code>). Revisa el permiso del navegador. Si estás viendo la página dentro de otra app (por ejemplo, la vista previa de Claude), el micrófono está bloqueado: abre el archivo .html directamente en el navegador o desde https. Mientras tanto puedes usar “Decodificar archivo de audio”.`);
+    return;
+  }
+  const a = ctx(); await a.resume();
+  rxDec = makeDecoder(a.sampleRate);
+  const src = a.createMediaStreamSource(rxStream);
+  rxNode = a.createScriptProcessor(4096, 1, 1);
+  rxNode.onaudioprocess = e => rxDec && rxDec.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+  const mute = a.createGain(); mute.gain.value = 0;
+  src.connect(rxNode); rxNode.connect(mute); mute.connect(a.destination);
+  rxNode._src = src; rxNode._mute = mute;
+  $('btnListen').textContent = '■ Dejar de escuchar'; $('btnListen').classList.add('stop');
+  $('rxStatus').textContent = `Escuchando a ${a.sampleRate} Hz… esperando tono de INICIO (${Core.FREQS[Core.START]} Hz).`;
+  drawRx();
+}
+
+function stopListen() {
+  if (rxNode) { rxNode.disconnect(); rxNode._src.disconnect(); rxNode._mute.disconnect(); rxNode = null; }
+  if (rxStream) { rxStream.getTracks().forEach(t => t.stop()); rxStream = null; }
+  rxDec = null;
+  $('btnListen').textContent = '🎤 Empezar a escuchar'; $('btnListen').classList.remove('stop');
+  $('rxStatus').textContent = 'Micrófono detenido.';
+}
+
+$('btnListen').onclick = () => rxStream ? stopListen() : startListen();
+
+$('fileIn').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  rxWarn('');
+  try {
+    const a = ctx();
+    const audio = await a.decodeAudioData(await f.arrayBuffer());
+    const ch = audio.getChannelData(0);
+    const dec = makeDecoder(audio.sampleRate);
+    let found = 0; const cbMsg = dec.cb.onMessage; dec.cb.onMessage = m => { found++; cbMsg(m); };
+    $('rxStatus').textContent = `Analizando “${f.name}” (${audio.duration.toFixed(1)} s)…`;
+    for (let i = 0; i < ch.length; i += 4096) dec.push(ch.subarray(i, i + 4096));
+    dec.push(new Float32Array(Math.round(audio.sampleRate * 2.5)));   // silencio final para cerrar
+    drawRx();
+    $('rxStatus').textContent = found ? `Archivo analizado: ${found} mensaje(s) encontrado(s).` : 'No se encontró ninguna transmisión en el archivo. Prueba bajando la sensibilidad.';
+  } catch (err) { rxWarn('No se pudo leer el archivo de audio: ' + err.message); }
+  e.target.value = '';
+};
+drawRx();
+
+// ---- App instalable (PWA) ----
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
