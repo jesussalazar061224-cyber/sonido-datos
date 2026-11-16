@@ -98,7 +98,7 @@
     <div class="row" style="margin-top:0">
       <button class="btn" id="btnListen">🎤 Empezar a escuchar</button>
       <label class="btn sec" style="margin:0;color:var(--txt);font-size:1rem">📂 Decodificar archivo de audio
-        <input type="file" id="fileIn" accept="audio/*" style="display:none">
+        <input type="file" id="fileIn" accept="audio/*,.opus,.ogg,.oga,.mp3,.m4a,.aac,.wav,.webm,.flac" style="display:none">
       </label>
     </div>
     <label for="sens">Sensibilidad (umbral de tonalidad): <b id="sensVal">0.20</b> — bájala si no detecta, súbela si capta ruido</label>
@@ -512,7 +512,7 @@ $('fileIn').onchange = async e => {
     dec.push(new Float32Array(Math.round(audio.sampleRate * 2.5)));   // silencio final para cerrar
     drawRx();
     $('rxStatus').textContent = found ? `Archivo analizado: ${found} mensaje(s) encontrado(s).` : 'No se encontró ninguna transmisión en el archivo. Prueba bajando la sensibilidad.';
-  } catch (err) { rxWarn('No se pudo leer el archivo de audio: ' + err.message); }
+  } catch (err) { rxWarn('No se pudo leer el archivo de audio (' + (err.message || err) + '). Formatos que funcionan: WAV, OPUS/OGG (audios de WhatsApp), MP3, M4A. Si es una nota de voz de iPhone, compártela como archivo.'); }
   e.target.value = '';
 };
 drawRx();
