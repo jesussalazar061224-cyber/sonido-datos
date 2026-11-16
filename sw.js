@@ -1,5 +1,5 @@
 // Guarda la app en el celular para que funcione sin internet
-const CACHE = 'sonido-datos-v1';
+const CACHE = 'sonido-datos-v2';
 const ARCHIVOS = ['./', 'index.html', 'manifest.json', 'icono-192.png', 'icono-512.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(
